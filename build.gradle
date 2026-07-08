@@ -1,0 +1,31 @@
+plugins {
+    id 'com.android.application' version '9.2.1' apply false
+    id 'com.android.library' version '9.2.1' apply false
+}
+
+subprojects { project ->
+    project.plugins.withType(com.android.build.gradle.LibraryPlugin) {
+        android {
+            publishing {
+                singleVariant('release') {
+                    withSourcesJar()
+                }
+            }
+        }
+        project.apply plugin: 'maven-publish'
+        project.afterEvaluate {
+            if (project.plugins.hasPlugin('maven-publish')) {
+                project.publishing {
+                    publications {
+                        maven(MavenPublication) {
+                            from project.components.release
+                            groupId = 'com.github.solodroid-dev.libraries.ads.mobile.sdk'
+                            artifactId = project.name
+                            version = '1.0.0'
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

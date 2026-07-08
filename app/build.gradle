@@ -1,0 +1,52 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    compileSdk = 37
+    namespace = "com.app.mobileadssdk"
+    defaultConfig {
+        applicationId = "com.app.mobileadssdk"
+        minSdk = 24
+        targetSdk = 37
+        versionCode = 1
+        versionName = "1.0.0"
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            //shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    buildFeatures {
+        buildConfig = true
+    }
+    bundle {
+        storeArchive {
+            enable = false
+        }
+    }
+    lint {
+//        disable 'OldTargetApi', 'GradleDependency', 'GradleDynamicVersion'
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    
+    implementation project(':core')
+    implementation project(':admob')
+    implementation project(':gam')
+    implementation project(':startapp')
+    implementation project(':facebook')
+    implementation project(':applovin')
+    implementation project(':unity')
+    implementation project(':ironsource')
+    
+}
