@@ -1,6 +1,6 @@
 plugins {
-    id 'com.android.application' version '8.2.0' apply false
-    id 'com.android.library' version '8.2.0' apply false
+    id 'com.android.application' version '8.9.1' apply false
+    id 'com.android.library' version '8.9.1' apply false
 //    id 'com.android.application' version '9.2.1' apply false
 //    id 'com.android.library' version '9.2.1' apply false
 }
@@ -23,7 +23,7 @@ subprojects { project ->
                             from project.components.release
                             groupId = 'com.github.solodroid-dev.mobile-ads-sdk'
                             artifactId = project.name
-                            version = '1.2.0-beta02'
+                            version = '1.2.0-beta03'
                         }
                     }
                 }
