@@ -24,7 +24,6 @@ public class AdsManager implements DefaultLifecycleObserver {
     private boolean isMainRewardedLoaded = false, isBackupRewardedLoaded = false;
     private boolean isMainAppOpenLoaded = false, isBackupAppOpenLoaded = false;
 
-    // Flag untuk mencegah iklan tumpang tindih
     private boolean isAdShowing = false;
     private Activity currentActivity;
 
@@ -37,7 +36,6 @@ public class AdsManager implements DefaultLifecycleObserver {
         this.adsPref = new AdsPrefManager(activity);
     }
 
-    // --- INTERFACE CALLBACK ---
     public interface InitializationListener {
         void onInitComplete();
     }
@@ -46,14 +44,12 @@ public class AdsManager implements DefaultLifecycleObserver {
         void onFinished();
     }
 
-    // PERBAIKAN: Memecah callback Rewarded agar UX di MainActivity lebih baik
     public interface RewardFinishedListener {
         void onRewardEarned();
         void onAdClosed();
         void onAdFailed();
     }
 
-    // HELPER: Adapter agar kita tidak perlu override metode kosong yang tidak dipakai
     private abstract static class SimpleAdListener implements AdInternalListener {
         @Override public void onAdLoaded() {}
         @Override public void onAdFailed() {}
@@ -92,14 +88,18 @@ public class AdsManager implements DefaultLifecycleObserver {
                         backupProvider = getProviderInstance(ads.getBackupAds());
                         if (backupProvider != null) backupProvider.init(activity, ads, null);
                     }
+
+                    // PERBAIKAN 1: Pindahkan observer ke SINI.
+                    // Jangan daftarkan observer sebelum inisialisasi AdMob benar-benar selesai.
+                    ProcessLifecycleOwner.get().getLifecycle().addObserver(AdsManager.this);
+
                     if (listener != null) listener.onInitComplete();
                 }
             });
         } else {
+            ProcessLifecycleOwner.get().getLifecycle().addObserver(this);
             if (listener != null) listener.onInitComplete();
         }
-
-        ProcessLifecycleOwner.get().getLifecycle().addObserver(this);
     }
 
     @Override
@@ -107,7 +107,10 @@ public class AdsManager implements DefaultLifecycleObserver {
         if (currentActivity == null || isAdShowing) return;
 
         String activityName = currentActivity.getClass().getSimpleName();
-        if (activityName.equals("SplashActivity")) {
+
+        // PERBAIKAN 2: Gunakan toLowerCase().contains("splash") agar fleksibel.
+        // Ini akan lolos untuk "SplashActivity" maupun "ActivitySplash".
+        if (activityName.toLowerCase().contains("splash")) {
             Log.d("AdsManager", "Ignore App Open on Splash to prevent stuck.");
             return;
         }
@@ -165,7 +168,7 @@ public class AdsManager implements DefaultLifecycleObserver {
                 clickCount = 0;
             } else {
                 callback.onFinished();
-                clickCount--; // Jangan reset klik jika gagal tayang
+                clickCount--;
                 loadInterstitial(activity);
             }
         } else {
@@ -197,7 +200,7 @@ public class AdsManager implements DefaultLifecycleObserver {
         }
     }
 
-    // --- REWARDED LOGIC (DIPERBARUI) ---
+    // --- REWARDED LOGIC ---
     public void loadRewarded(Activity activity) {
         AdModel ads = adsPref.getAdsData();
         if (ads == null || !ads.isAdStatus() || !ads.isRewardedStatus() || mainProvider == null) return;
