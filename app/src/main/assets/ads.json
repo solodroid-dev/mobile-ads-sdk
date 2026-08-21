@@ -1,9 +1,9 @@
 {
   "ads": {
     "mainAds": "admob",
-    "backupAds": "startapp",
+    "backupAds": "none",
     "adStatus": true,
-    "interstitialInterval": 2,
+    "interstitialInterval": 1,
     "bannerStatus": true,
     "interstitialStatus": true,
     "nativeStatus": true,
@@ -15,7 +15,7 @@
     "mainUnityGameId": "0",
     "mainIronsourceAppKey": "0",
     "mainApplovinSdkKey": "0",
-    "mainBannerId": "ca-app-pub-3940256099942544/9214589741",
+    "mainBannerId": "ca-app-pub-3940256099942544/6300978111",
     "mainInterstitialId": "ca-app-pub-3940256099942544/1033173712",
     "mainNativeId": "ca-app-pub-3940256099942544/2247696110",
     "mainRewardedId": "ca-app-pub-3940256099942544/5224354917",
@@ -23,13 +23,13 @@
     "backupAdmobAppId": "0",
     "backupAdManagerAppId": "0",
     "backupStartappAppId": "205489527",
-    "backupUnityGameId": "0",
+    "backupUnityGameId": "4089993",
     "backupIronsourceAppKey": "0",
     "backupApplovinSdkKey": "0",
-    "backupBannerId": "0",
-    "backupInterstitialId": "0",
-    "backupNativeId": "0",
-    "backupRewardedId": "0",
-    "backupAppOpenId": "0"
+    "backupBannerId": "banner",
+    "backupInterstitialId": "video",
+    "backupNativeId": "banner",
+    "backupRewardedId": "rewardedVideo",
+    "backupAppOpenId": "video"
   }
 }

@@ -46,15 +46,33 @@ public class AdsManager implements DefaultLifecycleObserver {
 
     public interface RewardFinishedListener {
         void onRewardEarned();
+
         void onAdClosed();
+
         void onAdFailed();
     }
 
     private abstract static class SimpleAdListener implements AdInternalListener {
-        @Override public void onAdLoaded() {}
-        @Override public void onAdFailed() {}
-        @Override public void onAdDismissed() {}
-        @Override public void onRewardEarned() {}
+        @Override
+        public void onAdLoaded() {
+        }
+
+        @Override
+        public void onAdFailed() {
+        }
+
+        @Override
+        public void onAdDismissed() {
+        }
+
+        @Override
+        public void onRewardEarned() {
+        }
+    }
+
+    // --- FITUR BARU: Izinkan Activity mengecek apakah iklan sedang tayang ---
+    public boolean isAdShowing() {
+        return isAdShowing;
     }
 
     // --- INIT LOGIC ---
@@ -62,13 +80,33 @@ public class AdsManager implements DefaultLifecycleObserver {
         this.currentActivity = activity;
 
         activity.getApplication().registerActivityLifecycleCallbacks(new android.app.Application.ActivityLifecycleCallbacks() {
-            @Override public void onActivityResumed(@NonNull Activity activity) { currentActivity = activity; }
-            @Override public void onActivityPaused(@NonNull Activity activity) {}
-            @Override public void onActivityCreated(@NonNull Activity activity, Bundle bundle) {}
-            @Override public void onActivityStarted(@NonNull Activity activity) {}
-            @Override public void onActivityStopped(@NonNull Activity activity) {}
-            @Override public void onActivitySaveInstanceState(@NonNull Activity activity, @NonNull Bundle bundle) {}
-            @Override public void onActivityDestroyed(@NonNull Activity activity) {
+            @Override
+            public void onActivityResumed(@NonNull Activity activity) {
+                currentActivity = activity;
+            }
+
+            @Override
+            public void onActivityPaused(@NonNull Activity activity) {
+            }
+
+            @Override
+            public void onActivityCreated(@NonNull Activity activity, Bundle bundle) {
+            }
+
+            @Override
+            public void onActivityStarted(@NonNull Activity activity) {
+            }
+
+            @Override
+            public void onActivityStopped(@NonNull Activity activity) {
+            }
+
+            @Override
+            public void onActivitySaveInstanceState(@NonNull Activity activity, @NonNull Bundle bundle) {
+            }
+
+            @Override
+            public void onActivityDestroyed(@NonNull Activity activity) {
                 if (currentActivity == activity) currentActivity = null;
             }
         });
@@ -88,11 +126,7 @@ public class AdsManager implements DefaultLifecycleObserver {
                         backupProvider = getProviderInstance(ads.getBackupAds());
                         if (backupProvider != null) backupProvider.init(activity, ads, null);
                     }
-
-                    // PERBAIKAN 1: Pindahkan observer ke SINI.
-                    // Jangan daftarkan observer sebelum inisialisasi AdMob benar-benar selesai.
                     ProcessLifecycleOwner.get().getLifecycle().addObserver(AdsManager.this);
-
                     if (listener != null) listener.onInitComplete();
                 }
             });
@@ -107,21 +141,18 @@ public class AdsManager implements DefaultLifecycleObserver {
         if (currentActivity == null || isAdShowing) return;
 
         String activityName = currentActivity.getClass().getSimpleName();
-
-        // PERBAIKAN 2: Gunakan toLowerCase().contains("splash") agar fleksibel.
-        // Ini akan lolos untuk "SplashActivity" maupun "ActivitySplash".
         if (activityName.toLowerCase().contains("splash")) {
             Log.d("AdsManager", "Ignore App Open on Splash to prevent stuck.");
             return;
         }
-
         showAppOpen(currentActivity, () -> Log.d("AdsManager", "App Open dismissed on Return to App"));
     }
 
     // --- INTERSTITIAL LOGIC ---
     public void loadInterstitial(Activity activity) {
         AdModel ads = adsPref.getAdsData();
-        if (ads == null || !ads.isAdStatus() || !ads.isInterstitialStatus() || mainProvider == null) return;
+        if (ads == null || !ads.isAdStatus() || !ads.isInterstitialStatus() || mainProvider == null)
+            return;
 
         mainProvider.loadInterstitial(activity, ads.getMainInterstitialId(), new SimpleAdListener() {
             @Override
@@ -151,6 +182,13 @@ public class AdsManager implements DefaultLifecycleObserver {
     public void showInterstitial(Activity activity, boolean useInterval, AdFinishedListener callback) {
         this.currentActivity = activity;
         AdModel ads = adsPref.getAdsData();
+
+        // PROTEKSI: Jika activity sudah mati, batalkan!
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            callback.onFinished();
+            return;
+        }
+
         if (ads == null || !ads.isAdStatus()) {
             callback.onFinished();
             return;
@@ -203,7 +241,8 @@ public class AdsManager implements DefaultLifecycleObserver {
     // --- REWARDED LOGIC ---
     public void loadRewarded(Activity activity) {
         AdModel ads = adsPref.getAdsData();
-        if (ads == null || !ads.isAdStatus() || !ads.isRewardedStatus() || mainProvider == null) return;
+        if (ads == null || !ads.isAdStatus() || !ads.isRewardedStatus() || mainProvider == null)
+            return;
 
         mainProvider.loadRewarded(activity, ads.getMainRewardedId(), new SimpleAdListener() {
             @Override
@@ -232,6 +271,13 @@ public class AdsManager implements DefaultLifecycleObserver {
 
     public void showRewarded(Activity activity, RewardFinishedListener callback) {
         this.currentActivity = activity;
+
+        // PROTEKSI: Jika activity sudah mati, batalkan!
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            callback.onAdFailed();
+            return;
+        }
+
         isAdShowing = true;
         final boolean[] isEarned = {false};
 
@@ -251,11 +297,8 @@ public class AdsManager implements DefaultLifecycleObserver {
             @Override
             public void onAdDismissed() {
                 isAdShowing = false;
-                if (isEarned[0]) {
-                    callback.onRewardEarned();
-                } else {
-                    callback.onAdClosed();
-                }
+                if (isEarned[0]) callback.onRewardEarned();
+                else callback.onAdClosed();
                 loadRewarded(activity);
             }
         };
@@ -313,6 +356,12 @@ public class AdsManager implements DefaultLifecycleObserver {
 
     public void showAppOpen(Activity activity, AdFinishedListener callback) {
         this.currentActivity = activity;
+
+        // PROTEKSI GANDA: Jangan tayangkan jika Activity mati atau Iklan lain sedang tayang!
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            callback.onFinished();
+            return;
+        }
         if (isAdShowing) {
             callback.onFinished();
             return;
@@ -344,14 +393,13 @@ public class AdsManager implements DefaultLifecycleObserver {
     // --- BANNER & NATIVE ---
     public void loadBanner(Activity activity, ViewGroup container) {
         AdModel ads = adsPref.getAdsData();
-        if (ads == null || !ads.isAdStatus() || !ads.isBannerStatus() || mainProvider == null) return;
-
+        if (ads == null || !ads.isAdStatus() || !ads.isBannerStatus() || mainProvider == null)
+            return;
         mainProvider.loadBanner(activity, container, ads.getMainBannerId(), new SimpleAdListener() {
             @Override
             public void onAdFailed() {
-                if (backupProvider != null) {
+                if (backupProvider != null)
                     backupProvider.loadBanner(activity, container, ads.getBackupBannerId(), null);
-                }
             }
         });
     }
@@ -362,32 +410,25 @@ public class AdsManager implements DefaultLifecycleObserver {
 
     public void loadNative(Activity activity, ViewGroup container, String style) {
         AdModel ads = adsPref.getAdsData();
-        if (ads == null || !ads.isAdStatus() || !ads.isNativeStatus() || mainProvider == null) return;
-
+        if (ads == null || !ads.isAdStatus() || !ads.isNativeStatus() || mainProvider == null)
+            return;
         mainProvider.loadNative(activity, container, ads.getMainNativeId(), style, new SimpleAdListener() {
             @Override
             public void onAdFailed() {
-                if (backupProvider != null) {
+                if (backupProvider != null)
                     backupProvider.loadNative(activity, container, ads.getBackupNativeId(), style, null);
-                }
             }
         });
     }
 
     public void showPrivacyOptions(Activity activity) {
-        if (mainProvider != null) {
-            mainProvider.showPrivacyOptions(activity);
-        } else if (backupProvider != null) {
-            backupProvider.showPrivacyOptions(activity);
-        }
+        if (mainProvider != null) mainProvider.showPrivacyOptions(activity);
+        else if (backupProvider != null) backupProvider.showPrivacyOptions(activity);
     }
 
     public boolean isPrivacyOptionsRequired(Activity activity) {
-        if (mainProvider != null) {
-            return mainProvider.isPrivacyOptionsRequired(activity);
-        } else if (backupProvider != null) {
-            return backupProvider.isPrivacyOptionsRequired(activity);
-        }
+        if (mainProvider != null) return mainProvider.isPrivacyOptionsRequired(activity);
+        else if (backupProvider != null) return backupProvider.isPrivacyOptionsRequired(activity);
         return false;
     }
 

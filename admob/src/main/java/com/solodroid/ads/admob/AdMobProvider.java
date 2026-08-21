@@ -55,10 +55,17 @@ import java.util.List;
 
 public class AdMobProvider implements AdProvider {
 
+    private static final String TAG = "AdMobProvider";
+
     private InterstitialAd mInterstitial;
     private RewardedAd mRewarded;
     private AppOpenAd mAppOpen;
     private boolean isMobileAdsInitializeCalled = false;
+
+    // --- SISTEM KUNCI ANTI DUPLIKAT (RACE CONDITION) ---
+    private boolean isInterstitialLoading = false;
+    private boolean isRewardedLoading = false;
+    private boolean isAppOpenLoading = false;
 
     @Override
     public void init(Activity activity, AdModel adModel, AdsManager.InitializationListener listener) {
@@ -77,13 +84,13 @@ public class AdMobProvider implements AdProvider {
             if (admobAppId != null && !admobAppId.isEmpty()) {
                 InitializationConfig config = new InitializationConfig.Builder(admobAppId).build();
                 MobileAds.initialize(activity, config, initializationStatus -> {
-                    Log.d("AdMobProvider", "AdMob Initialized successfully");
+                    Log.d(TAG, "AdMob SDK Initialized successfully");
                     activity.runOnUiThread(() -> {
                         if (listener != null) listener.onInitComplete();
                     });
                 });
             } else {
-                Log.e("AdMobProvider", "Gagal inisialisasi AdMob Next-Gen: App ID kosong!");
+                Log.e(TAG, "AdMob SDK Init Failed: App ID is empty or null!");
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onInitComplete();
                 });
@@ -91,9 +98,13 @@ public class AdMobProvider implements AdProvider {
         });
     }
 
+    // =========================================================================================
+    // BANNER AD (View-based, no global lock needed)
+    // =========================================================================================
     @Override
     public void loadBanner(Activity activity, ViewGroup container, String adUnitId, AdInternalListener listener) {
         if (adUnitId == null || adUnitId.equals("0") || adUnitId.isEmpty()) {
+            Log.e(TAG, "Banner Ad - Failed to load: Ad Unit ID is empty");
             if (listener != null) listener.onAdFailed();
             return;
         }
@@ -107,6 +118,7 @@ public class AdMobProvider implements AdProvider {
         adView.loadAd(adRequest, new AdLoadCallback<BannerAd>() {
             @Override
             public void onAdLoaded(@NonNull BannerAd ad) {
+                Log.d(TAG, "Banner Ad - Loaded successfully");
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdLoaded();
                 });
@@ -114,6 +126,7 @@ public class AdMobProvider implements AdProvider {
 
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError e) {
+                Log.e(TAG, "Banner Ad - Failed to load: " + e.getMessage());
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdFailed();
                 });
@@ -129,18 +142,39 @@ public class AdMobProvider implements AdProvider {
         return AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(activity, adWidth);
     }
 
+    // =========================================================================================
+    // INTERSTITIAL AD (Global, protected with loading lock)
+    // =========================================================================================
     @Override
     public void loadInterstitial(Activity activity, String adUnitId, AdInternalListener listener) {
         if (adUnitId == null || adUnitId.equals("0") || adUnitId.isEmpty()) {
+            Log.e(TAG, "Interstitial Ad - Failed to load: Ad Unit ID is empty");
             if (listener != null) listener.onAdFailed();
             return;
         }
 
+        // Cek 1: Jika iklan sudah siap tayang
+        if (mInterstitial != null) {
+            Log.d(TAG, "Interstitial Ad - Already loaded, skipping request");
+            if (listener != null) listener.onAdLoaded();
+            return;
+        }
+
+        // Cek 2: Jika iklan SEDANG di-request
+        if (isInterstitialLoading) {
+            Log.d(TAG, "Interstitial Ad - Currently loading, skipping duplicate request");
+            return;
+        }
+
+        isInterstitialLoading = true; // Kunci aktif
         AdRequest adRequest = new AdRequest.Builder(adUnitId).build();
+
         InterstitialAd.load(adRequest, new AdLoadCallback<InterstitialAd>() {
             @Override
             public void onAdLoaded(@NonNull InterstitialAd interstitialAd) {
+                Log.d(TAG, "Interstitial Ad - Loaded successfully");
                 mInterstitial = interstitialAd;
+                isInterstitialLoading = false; // Buka kunci
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdLoaded();
                 });
@@ -148,7 +182,9 @@ public class AdMobProvider implements AdProvider {
 
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
+                Log.e(TAG, "Interstitial Ad - Failed to load: " + loadAdError.getMessage());
                 mInterstitial = null;
+                isInterstitialLoading = false; // Buka kunci
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdFailed();
                 });
@@ -164,6 +200,7 @@ public class AdMobProvider implements AdProvider {
                         new InterstitialAdEventCallback() {
                             @Override
                             public void onAdDismissedFullScreenContent() {
+                                Log.d(TAG, "Interstitial Ad - Dismissed by user");
                                 mInterstitial = null;
                                 activity.runOnUiThread(() -> {
                                     if (listener != null) listener.onAdDismissed();
@@ -172,6 +209,7 @@ public class AdMobProvider implements AdProvider {
 
                             @Override
                             public void onAdFailedToShowFullScreenContent(@NonNull FullScreenContentError fullScreenContentError) {
+                                Log.e(TAG, "Interstitial Ad - Failed to show: " + fullScreenContentError.getMessage());
                                 mInterstitial = null;
                                 activity.runOnUiThread(() -> {
                                     if (listener != null) listener.onAdDismissed();
@@ -179,16 +217,22 @@ public class AdMobProvider implements AdProvider {
                             }
                         }
                 );
+                Log.d(TAG, "Interstitial Ad - Showing to user");
                 mInterstitial.show(activity);
             } else {
+                Log.e(TAG, "Interstitial Ad - Cannot show, ad is null (Not loaded yet)");
                 if (listener != null) listener.onAdDismissed();
             }
         });
     }
 
+    // =========================================================================================
+    // NATIVE AD (View-based, no global lock needed)
+    // =========================================================================================
     @Override
     public void loadNative(Activity activity, ViewGroup container, String adUnitId, String style, AdInternalListener listener) {
         if (adUnitId == null || adUnitId.equals("0") || adUnitId.isEmpty()) {
+            Log.e(TAG, "Native Ad - Failed to load: Ad Unit ID is empty");
             if (listener != null) listener.onAdFailed();
             return;
         }
@@ -199,6 +243,7 @@ public class AdMobProvider implements AdProvider {
         NativeAdLoader.load(adRequest, new NativeAdLoaderCallback() {
             @Override
             public void onNativeAdLoaded(@NonNull NativeAd nativeAd) {
+                Log.d(TAG, "Native Ad - Loaded successfully");
                 activity.runOnUiThread(() -> {
                     int layoutResId;
                     String safeStyle = (style != null) ? style.toLowerCase() : "medium";
@@ -241,6 +286,7 @@ public class AdMobProvider implements AdProvider {
 
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError e) {
+                Log.e(TAG, "Native Ad - Failed to load: " + e.getMessage());
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdFailed();
                 });
@@ -292,18 +338,37 @@ public class AdMobProvider implements AdProvider {
         adView.registerNativeAd(nativeAd, mediaView);
     }
 
+    // =========================================================================================
+    // REWARDED AD (Global, protected with loading lock)
+    // =========================================================================================
     @Override
     public void loadRewarded(Activity activity, String adUnitId, AdInternalListener listener) {
         if (adUnitId == null || adUnitId.equals("0") || adUnitId.isEmpty()) {
+            Log.e(TAG, "Rewarded Ad - Failed to load: Ad Unit ID is empty");
             if (listener != null) listener.onAdFailed();
             return;
         }
 
+        if (mRewarded != null) {
+            Log.d(TAG, "Rewarded Ad - Already loaded, skipping request");
+            if (listener != null) listener.onAdLoaded();
+            return;
+        }
+
+        if (isRewardedLoading) {
+            Log.d(TAG, "Rewarded Ad - Currently loading, skipping duplicate request");
+            return;
+        }
+
+        isRewardedLoading = true; // Kunci aktif
         AdRequest adRequest = new AdRequest.Builder(adUnitId).build();
+
         RewardedAd.load(adRequest, new AdLoadCallback<RewardedAd>() {
             @Override
             public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
+                Log.d(TAG, "Rewarded Ad - Loaded successfully");
                 mRewarded = rewardedAd;
+                isRewardedLoading = false; // Buka kunci
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdLoaded();
                 });
@@ -311,7 +376,9 @@ public class AdMobProvider implements AdProvider {
 
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError e) {
+                Log.e(TAG, "Rewarded Ad - Failed to load: " + e.getMessage());
                 mRewarded = null;
+                isRewardedLoading = false; // Buka kunci
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdFailed();
                 });
@@ -327,6 +394,7 @@ public class AdMobProvider implements AdProvider {
                         new RewardedAdEventCallback() {
                             @Override
                             public void onAdDismissedFullScreenContent() {
+                                Log.d(TAG, "Rewarded Ad - Dismissed by user");
                                 mRewarded = null;
                                 activity.runOnUiThread(() -> {
                                     if (listener != null) listener.onAdDismissed();
@@ -335,6 +403,7 @@ public class AdMobProvider implements AdProvider {
 
                             @Override
                             public void onAdFailedToShowFullScreenContent(@NonNull FullScreenContentError fullScreenContentError) {
+                                Log.e(TAG, "Rewarded Ad - Failed to show: " + fullScreenContentError.getMessage());
                                 mRewarded = null;
                                 activity.runOnUiThread(() -> {
                                     if (listener != null) listener.onAdDismissed();
@@ -343,32 +412,53 @@ public class AdMobProvider implements AdProvider {
                         }
                 );
 
+                Log.d(TAG, "Rewarded Ad - Showing to user");
                 mRewarded.show(activity, rewardItem -> {
                     activity.runOnUiThread(() -> {
                         if (listener != null) {
                             listener.onRewardEarned();
-                            Log.d("AdMob", "Reward earned: " + rewardItem.getAmount());
+                            Log.d(TAG, "Rewarded Ad - Reward earned! Amount: " + rewardItem.getAmount());
                         }
                     });
                 });
             } else {
+                Log.e(TAG, "Rewarded Ad - Cannot show, ad is null (Not loaded yet)");
                 if (listener != null) listener.onAdDismissed();
             }
         });
     }
 
+    // =========================================================================================
+    // APP OPEN AD (Global, protected with loading lock)
+    // =========================================================================================
     @Override
     public void loadAppOpen(Activity activity, String adUnitId, AdInternalListener listener) {
         if (adUnitId == null || adUnitId.equals("0") || adUnitId.isEmpty()) {
+            Log.e(TAG, "App Open Ad - Failed to load: Ad Unit ID is empty");
             if (listener != null) listener.onAdFailed();
             return;
         }
 
+        if (mAppOpen != null) {
+            Log.d(TAG, "App Open Ad - Already loaded, skipping request");
+            if (listener != null) listener.onAdLoaded();
+            return;
+        }
+
+        if (isAppOpenLoading) {
+            Log.d(TAG, "App Open Ad - Currently loading, skipping duplicate request");
+            return;
+        }
+
+        isAppOpenLoading = true; // Kunci aktif
         AdRequest adRequest = new AdRequest.Builder(adUnitId).build();
+
         AppOpenAd.load(adRequest, new AdLoadCallback<AppOpenAd>() {
             @Override
             public void onAdLoaded(@NonNull AppOpenAd ad) {
+                Log.d(TAG, "App Open Ad - Loaded successfully");
                 mAppOpen = ad;
+                isAppOpenLoading = false; // Buka kunci
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdLoaded();
                 });
@@ -376,7 +466,9 @@ public class AdMobProvider implements AdProvider {
 
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError e) {
+                Log.e(TAG, "App Open Ad - Failed to load: " + e.getMessage());
                 mAppOpen = null;
+                isAppOpenLoading = false; // Buka kunci
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdFailed();
                 });
@@ -387,11 +479,19 @@ public class AdMobProvider implements AdProvider {
     @Override
     public void showAppOpen(Activity activity, AdInternalListener listener) {
         activity.runOnUiThread(() -> {
+            // PROTEKSI SANGAT PENTING:
+            if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+                Log.e(TAG, "App Open Ad - Activity is dying, aborting ad show!");
+                if (listener != null) listener.onAdDismissed();
+                return;
+            }
+
             if (mAppOpen != null) {
                 mAppOpen.setAdEventCallback(
                         new AppOpenAdEventCallback() {
                             @Override
                             public void onAdDismissedFullScreenContent() {
+                                Log.d(TAG, "App Open Ad - Dismissed by user");
                                 mAppOpen = null;
                                 activity.runOnUiThread(() -> {
                                     if (listener != null) listener.onAdDismissed();
@@ -400,26 +500,32 @@ public class AdMobProvider implements AdProvider {
 
                             @Override
                             public void onAdFailedToShowFullScreenContent(@NonNull FullScreenContentError fullScreenContentError) {
+                                Log.e(TAG, "App Open Ad - Failed to show: " + fullScreenContentError.getMessage());
                                 mAppOpen = null;
                                 activity.runOnUiThread(() -> {
                                     if (listener != null) listener.onAdDismissed();
                                 });
                             }
                         });
+                Log.d(TAG, "App Open Ad - Showing to user");
                 mAppOpen.show(activity);
             } else {
+                Log.e(TAG, "App Open Ad - Cannot show, ad is null (Not loaded yet)");
                 if (listener != null) listener.onAdDismissed();
             }
         });
     }
 
+    // =========================================================================================
+    // PRIVACY / GDPR
+    // =========================================================================================
     @Override
     public void showPrivacyOptions(Activity activity) {
         AdMobGdpr adMobGdpr = new AdMobGdpr(activity);
         if (adMobGdpr.isPrivacyOptionsRequired()) {
             adMobGdpr.showPrivacyOptionsForm(activity, formError -> {
                 if (formError != null) {
-                    Log.w("AdMobProvider", "Error showing privacy options form: " + formError.getMessage());
+                    Log.w(TAG, "Error showing privacy options form: " + formError.getMessage());
                 }
             });
         }

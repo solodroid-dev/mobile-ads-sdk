@@ -15,70 +15,95 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:padding="8dp">
+            android:padding="12dp">
 
-            <!-- Icon Iklan -->
-            <ImageView
-                android:id="@+id/ad_app_icon"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:scaleType="centerCrop" />
+            <!-- Bagian Kiri: Icon 64dp Melengkung (Meniru referensi lama Anda) -->
+            <androidx.cardview.widget.CardView
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="0dp">
 
-            <!-- Konten (Kanan) -->
-            <RelativeLayout
+                <ImageView
+                    android:id="@+id/ad_app_icon"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerCrop" />
+            </androidx.cardview.widget.CardView>
+
+            <!-- Bagian Kanan: Teks & Tombol CTA -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp">
+                android:layout_marginStart="12dp"
+                android:orientation="vertical">
 
-                <!-- Label "Ad" Wajib AdMob -->
-                <TextView
-                    android:id="@+id/ad_label"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="#FFCC00"
-                    android:paddingHorizontal="4dp"
-                    android:paddingVertical="2dp"
-                    android:text="Ad"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10sp"
-                    android:textStyle="bold" />
-
-                <!-- Headline -->
-                <TextView
-                    android:id="@+id/ad_headline"
+                <!-- Baris Atas: Label Ad + Headline -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_toEndOf="@id/ad_label"
-                    android:layout_marginStart="4dp"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-                <!-- Body (Deskripsi Singkat) -->
+                    <!-- Label "Ad" Rounded -->
+                    <androidx.cardview.widget.CardView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:cardBackgroundColor="#FFCC00"
+                        app:cardCornerRadius="4dp"
+                        app:cardElevation="0dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:paddingHorizontal="6dp"
+                            android:paddingVertical="2dp"
+                            android:text="Ad"
+                            android:textColor="#FFFFFF"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+                    </androidx.cardview.widget.CardView>
+
+                    <!-- Headline Iklan -->
+                    <TextView
+                        android:id="@+id/ad_headline"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textAppearance="@style/Base.TextAppearance.AppCompat.Body2"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Baris Tengah: Deskripsi / Body -->
                 <TextView
                     android:id="@+id/ad_body"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_below="@id/ad_headline"
-                    android:layout_marginTop="2dp"
+                    android:layout_marginTop="4dp"
                     android:ellipsize="end"
-                    android:maxLines="1"
+                    android:maxLines="2"
                     android:textSize="12sp" />
 
-                <!-- Tombol CTA -->
+                <!-- Baris Bawah: Tombol CTA Ramping -->
                 <Button
                     android:id="@+id/ad_call_to_action"
                     android:layout_width="match_parent"
-                    android:layout_height="36dp"
-                    android:layout_below="@id/ad_body"
-                    android:layout_marginTop="4dp"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="6dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
                     android:padding="0dp"
                     android:textColor="@android:color/white"
-                    android:textSize="12sp" />
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
 
-            </RelativeLayout>
+            </LinearLayout>
+
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 

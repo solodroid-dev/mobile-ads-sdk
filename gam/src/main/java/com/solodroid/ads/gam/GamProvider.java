@@ -3,9 +3,11 @@ package com.solodroid.ads.gam;
 import android.app.Activity;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -55,6 +57,8 @@ import java.util.List;
 
 public class GamProvider implements AdProvider {
 
+    private static final String TAG = "GamProvider";
+
     private InterstitialAd mInterstitial;
     private RewardedAd mRewarded;
     private AppOpenAd mAppOpen;
@@ -65,31 +69,30 @@ public class GamProvider implements AdProvider {
         GamGdpr gamGdpr = new GamGdpr(activity);
         gamGdpr.gatherConsent(() -> {
             if (isMobileAdsInitializeCalled) {
-                // Return di sini untuk mencegah bug double-trigger dari UMP GDPR
                 return;
             }
             isMobileAdsInitializeCalled = true;
 
-            // Menggunakan App ID khusus Google Ad Manager dari AdModel
             String gamAppId = adModel.getMainAdManagerAppId();
             if (gamAppId == null || gamAppId.isEmpty() || gamAppId.equals("0")) {
                 gamAppId = adModel.getBackupAdManagerAppId();
             }
 
-            if (gamAppId != null && !gamAppId.isEmpty() && !gamAppId.equals("0")) {
-                InitializationConfig config = new InitializationConfig.Builder(gamAppId).build();
-                MobileAds.initialize(activity, config, initializationStatus -> {
-                    Log.d("GamProvider", "GAM Initialized successfully");
-                    activity.runOnUiThread(() -> {
-                        if (listener != null) listener.onInitComplete();
-                    });
-                });
-            } else {
-                Log.w("GamProvider", "GAM Inisialisasi dilewati: App ID kosong atau 0!");
+            // PERBAIKAN FATAL: Wajib Inisialisasi!
+            // Jika App ID GAM tidak diisi, gunakan Test ID AdMob agar mesin SDK tetap menyala.
+            // Tanpa inisialisasi, seluruh iklan tidak akan pernah muncul.
+            if (gamAppId == null || gamAppId.isEmpty() || gamAppId.equals("0")) {
+                gamAppId = "ca-app-pub-3940256099942544~3347511713";
+                Log.w(TAG, "GAM App ID kosong! Menggunakan Test ID untuk inisialisasi agar SDK tidak mati.");
+            }
+
+            InitializationConfig config = new InitializationConfig.Builder(gamAppId).build();
+            MobileAds.initialize(activity, config, initializationStatus -> {
+                Log.d(TAG, "GAM Initialized successfully");
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onInitComplete();
                 });
-            }
+            });
         });
     }
 
@@ -101,7 +104,19 @@ public class GamProvider implements AdProvider {
         }
 
         AdView adView = new AdView(activity);
-        BannerAdRequest adRequest = new BannerAdRequest.Builder(adUnitId, getAdSize(activity)).build();
+
+        // CONTOH PENAMBAHAN TAGS/KEYWORDS KHUSUS GAM:
+        BannerAdRequest adRequest = new BannerAdRequest.Builder(adUnitId, getAdSize(activity))
+                // .addKeyword("solodroid") // Uncomment jika butuh custom targeting GAM
+                .build();
+
+        // PERBAIKAN: Menambahkan LayoutParams agar banner tidak berukuran 0 piksel
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        params.gravity = Gravity.CENTER;
+        adView.setLayoutParams(params);
 
         container.removeAllViews();
         container.addView(adView);
@@ -109,6 +124,7 @@ public class GamProvider implements AdProvider {
         adView.loadAd(adRequest, new AdLoadCallback<BannerAd>() {
             @Override
             public void onAdLoaded(@NonNull BannerAd ad) {
+                Log.d(TAG, "Banner Loaded");
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdLoaded();
                 });
@@ -116,6 +132,7 @@ public class GamProvider implements AdProvider {
 
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError e) {
+                Log.e(TAG, "Banner Failed: " + e.getMessage());
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdFailed();
                 });
@@ -123,10 +140,8 @@ public class GamProvider implements AdProvider {
         });
     }
 
-    // UPDATE: Menggunakan metode ukuran banner modern (Android 11+ Ready)
     private AdSize getAdSize(Activity activity) {
         int adWidth;
-
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             android.view.WindowMetrics windowMetrics = activity.getWindowManager().getCurrentWindowMetrics();
             android.graphics.Rect bounds = windowMetrics.getBounds();
@@ -157,6 +172,7 @@ public class GamProvider implements AdProvider {
         InterstitialAd.load(adRequest, new AdLoadCallback<InterstitialAd>() {
             @Override
             public void onAdLoaded(@NonNull InterstitialAd interstitialAd) {
+                Log.d(TAG, "Interstitial Loaded");
                 mInterstitial = interstitialAd;
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdLoaded();
@@ -165,6 +181,7 @@ public class GamProvider implements AdProvider {
 
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
+                Log.e(TAG, "Interstitial Failed: " + loadAdError.getMessage());
                 mInterstitial = null;
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdFailed();
@@ -177,25 +194,23 @@ public class GamProvider implements AdProvider {
     public void showInterstitial(Activity activity, AdInternalListener listener) {
         activity.runOnUiThread(() -> {
             if (mInterstitial != null) {
-                mInterstitial.setAdEventCallback(
-                        new InterstitialAdEventCallback() {
-                            @Override
-                            public void onAdDismissedFullScreenContent() {
-                                mInterstitial = null;
-                                activity.runOnUiThread(() -> {
-                                    if (listener != null) listener.onAdDismissed();
-                                });
-                            }
+                mInterstitial.setAdEventCallback(new InterstitialAdEventCallback() {
+                    @Override
+                    public void onAdDismissedFullScreenContent() {
+                        mInterstitial = null;
+                        activity.runOnUiThread(() -> {
+                            if (listener != null) listener.onAdDismissed();
+                        });
+                    }
 
-                            @Override
-                            public void onAdFailedToShowFullScreenContent(@NonNull FullScreenContentError fullScreenContentError) {
-                                mInterstitial = null;
-                                activity.runOnUiThread(() -> {
-                                    if (listener != null) listener.onAdDismissed();
-                                });
-                            }
-                        }
-                );
+                    @Override
+                    public void onAdFailedToShowFullScreenContent(@NonNull FullScreenContentError fullScreenContentError) {
+                        mInterstitial = null;
+                        activity.runOnUiThread(() -> {
+                            if (listener != null) listener.onAdDismissed();
+                        });
+                    }
+                });
                 mInterstitial.show(activity);
             } else {
                 if (listener != null) listener.onAdDismissed();
@@ -216,6 +231,7 @@ public class GamProvider implements AdProvider {
         NativeAdLoader.load(adRequest, new NativeAdLoaderCallback() {
             @Override
             public void onNativeAdLoaded(@NonNull NativeAd nativeAd) {
+                Log.d(TAG, "Native Loaded");
                 activity.runOnUiThread(() -> {
                     int layoutResId;
                     String safeStyle = (style != null) ? style.toLowerCase() : "medium";
@@ -258,13 +274,13 @@ public class GamProvider implements AdProvider {
 
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError e) {
+                Log.e(TAG, "Native Failed: " + e.getMessage());
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdFailed();
                 });
             }
 
-            @Override
-            public void onAdLoadingCompleted() {}
+            @Override public void onAdLoadingCompleted() {}
         });
     }
 
@@ -306,7 +322,12 @@ public class GamProvider implements AdProvider {
         }
 
         MediaView mediaView = adView.findViewById(R.id.ad_media);
-        adView.registerNativeAd(nativeAd, mediaView);
+        if (mediaView != null) {
+            adView.registerNativeAd(nativeAd, mediaView);
+        } else {
+            // Khusus untuk Small Native (tanpa media)
+            adView.registerNativeAd(nativeAd, null);
+        }
     }
 
     @Override
@@ -320,6 +341,7 @@ public class GamProvider implements AdProvider {
         RewardedAd.load(adRequest, new AdLoadCallback<RewardedAd>() {
             @Override
             public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
+                Log.d(TAG, "Rewarded Loaded");
                 mRewarded = rewardedAd;
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdLoaded();
@@ -328,6 +350,7 @@ public class GamProvider implements AdProvider {
 
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError e) {
+                Log.e(TAG, "Rewarded Failed: " + e.getMessage());
                 mRewarded = null;
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdFailed();
@@ -340,31 +363,29 @@ public class GamProvider implements AdProvider {
     public void showRewarded(Activity activity, AdInternalListener listener) {
         activity.runOnUiThread(() -> {
             if (mRewarded != null) {
-                mRewarded.setAdEventCallback(
-                        new RewardedAdEventCallback() {
-                            @Override
-                            public void onAdDismissedFullScreenContent() {
-                                mRewarded = null;
-                                activity.runOnUiThread(() -> {
-                                    if (listener != null) listener.onAdDismissed();
-                                });
-                            }
+                mRewarded.setAdEventCallback(new RewardedAdEventCallback() {
+                    @Override
+                    public void onAdDismissedFullScreenContent() {
+                        mRewarded = null;
+                        activity.runOnUiThread(() -> {
+                            if (listener != null) listener.onAdDismissed();
+                        });
+                    }
 
-                            @Override
-                            public void onAdFailedToShowFullScreenContent(@NonNull FullScreenContentError fullScreenContentError) {
-                                mRewarded = null;
-                                activity.runOnUiThread(() -> {
-                                    if (listener != null) listener.onAdDismissed();
-                                });
-                            }
-                        }
-                );
+                    @Override
+                    public void onAdFailedToShowFullScreenContent(@NonNull FullScreenContentError fullScreenContentError) {
+                        mRewarded = null;
+                        activity.runOnUiThread(() -> {
+                            if (listener != null) listener.onAdDismissed();
+                        });
+                    }
+                });
 
                 mRewarded.show(activity, rewardItem -> {
                     activity.runOnUiThread(() -> {
                         if (listener != null) {
                             listener.onRewardEarned();
-                            Log.d("GamProvider", "Reward earned: " + rewardItem.getAmount());
+                            Log.d(TAG, "Reward earned: " + rewardItem.getAmount());
                         }
                     });
                 });
@@ -385,6 +406,7 @@ public class GamProvider implements AdProvider {
         AppOpenAd.load(adRequest, new AdLoadCallback<AppOpenAd>() {
             @Override
             public void onAdLoaded(@NonNull AppOpenAd ad) {
+                Log.d(TAG, "App Open Loaded");
                 mAppOpen = ad;
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdLoaded();
@@ -393,6 +415,7 @@ public class GamProvider implements AdProvider {
 
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError e) {
+                Log.e(TAG, "App Open Failed: " + e.getMessage());
                 mAppOpen = null;
                 activity.runOnUiThread(() -> {
                     if (listener != null) listener.onAdFailed();
@@ -405,24 +428,23 @@ public class GamProvider implements AdProvider {
     public void showAppOpen(Activity activity, AdInternalListener listener) {
         activity.runOnUiThread(() -> {
             if (mAppOpen != null) {
-                mAppOpen.setAdEventCallback(
-                        new AppOpenAdEventCallback() {
-                            @Override
-                            public void onAdDismissedFullScreenContent() {
-                                mAppOpen = null;
-                                activity.runOnUiThread(() -> {
-                                    if (listener != null) listener.onAdDismissed();
-                                });
-                            }
-
-                            @Override
-                            public void onAdFailedToShowFullScreenContent(@NonNull FullScreenContentError fullScreenContentError) {
-                                mAppOpen = null;
-                                activity.runOnUiThread(() -> {
-                                    if (listener != null) listener.onAdDismissed();
-                                });
-                            }
+                mAppOpen.setAdEventCallback(new AppOpenAdEventCallback() {
+                    @Override
+                    public void onAdDismissedFullScreenContent() {
+                        mAppOpen = null;
+                        activity.runOnUiThread(() -> {
+                            if (listener != null) listener.onAdDismissed();
                         });
+                    }
+
+                    @Override
+                    public void onAdFailedToShowFullScreenContent(@NonNull FullScreenContentError fullScreenContentError) {
+                        mAppOpen = null;
+                        activity.runOnUiThread(() -> {
+                            if (listener != null) listener.onAdDismissed();
+                        });
+                    }
+                });
                 mAppOpen.show(activity);
             } else {
                 if (listener != null) listener.onAdDismissed();
@@ -436,7 +458,7 @@ public class GamProvider implements AdProvider {
         if (gamGdpr.isPrivacyOptionsRequired()) {
             gamGdpr.showPrivacyOptionsForm(activity, formError -> {
                 if (formError != null) {
-                    Log.w("GamProvider", "Error showing privacy options form: " + formError.getMessage());
+                    Log.w(TAG, "Error showing privacy options form: " + formError.getMessage());
                 }
             });
         }
