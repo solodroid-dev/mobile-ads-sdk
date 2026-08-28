@@ -139,6 +139,11 @@ public class AdsManager implements DefaultLifecycleObserver {
     @Override
     public void onStart(@NonNull LifecycleOwner owner) {
         if (currentActivity == null || isAdShowing) return;
+        if (AdControl.isPickingFile) {
+            Log.d("AdsManager", "Ignore App Open Ad because user is returning from File Picker.");
+            AdControl.isPickingFile = false;
+            return;
+        }
 
         String activityName = currentActivity.getClass().getSimpleName();
         if (activityName.toLowerCase().contains("splash")) {
